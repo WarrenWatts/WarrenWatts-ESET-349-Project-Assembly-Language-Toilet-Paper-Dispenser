@@ -1,0 +1,95 @@
+
+				area finalproject, code, readonly
+
+
+				export __main
+__main	proc
+										; Configuration START
+				ldr r0, =0x40004C00		; Load register r0 with base memory address for GPIO registers: 0x40004C00
+				add r0,#0x40			; Set the program to look at Port 5 registers	
+				
+				mov r1, #0x00			; Set P5DIR registers to input using binary value (0000 0000)
+				strb r1, [r0, #0x04]	; Set all available pins on P5 to input pins
+					
+				mov r1, #0x00			; Prepare the binary value (0000 0000) for use in P5REN and P5OUT registers
+				strb r1, [r0, #0x06]	; P5REN: Port 5 pins set to general input with no resistor needed
+				strb r1, [r0, #0x02]	; P5OUT: Port 5 pins set to general input
+				
+				ldr r4, =0x40004C21		; Load register to Port 4 base address
+				
+				mov r1, #0x3F			; Set P4.5 (Red LED), P4.4 (Blue LED), P4.3 (Coil 4), P4.2 (Coil 3), P4.1 (Coil 2), P4.0 (Coil 1)
+										; to output using binary (0011 1111)
+				strb r1, [r4, #0x04]	; Store configuration value in P4DIR to enable output pins
+				
+				mov r1, #0x10			; Prepare the binary value (0001 0000) for use in P4OUT Register
+				strb r1, [r4, #0x02]	; Set blue LED to HI
+
+repeat			
+				mov r8, #0x80			; Set outer counter for rotation. Counter is reset at the top of this loop.
+				ldrb r7, [r0, #0x00] 	; Load the current input reading of r0 into r7 (address is 0x40004C40) 
+				and r7, #0x40 			; AND the current input reading of P5IN to binary 0100 0000 (corresponds to P5.6 input reading)
+				cmp r7, #00				; Compare the ANDed value of P5IN and 0
+				beq dispense			; If the input reads (0000 0000), the comparison will equal zero, and the dispense subroutine will be called
+				b repeat				; If the input reads (0100 0000), return to the top of the loop and continue checking for input
+				endp
+				
+dispense		function
+				mov r1, #0x20			; Set binary value for 0010 0000 for use in P4OUT
+				strb r1, [r4, #0x02]	; Blue LED is turned LO and Red LED is turned HI On Port 4
+				
+				push {lr}				; Store link register before calling nested subroutine
+				bl rotate_cw			; Begin rotating motor using rotate_cw function
+				pop {lr}				; Retrieve link register value to return to main function
+				
+				mov r1, #0x10			; Set binary value (0001 0000) for use in P4OUT
+				strb r1, [r4, #0x02]	; Blue LED is turned to HI and Red LED is turned to LO on Port 4
+				
+				b repeat				; Return to repeat loop
+				endp
+				
+rotate_cw		
+				
+				mov r1, #0x21			; Magnetize first coil P4.0 while keeping Red LED HI
+				strb r1, [r4, #0x02]
+				
+				push {lr}				
+				bl delay				; Store link register address in stack before delaying program
+				pop {lr}
+				
+				mov r1, #0x22			; Magnetize second coil P4.1 while keeping Red LED HI
+				strb r1, [r4, #0x02]
+				
+				push {lr}
+				bl delay				; Store link register address in stack before delaying program
+				pop {lr}
+				
+				mov r1, #0x24			; Magnetize third coil P4.2 while keeping Red LED HI
+				strb r1, [r4, #0x02]
+				
+				push {lr}
+				bl delay				; Store link register address in stack before delaying program
+				pop {lr}
+				
+				mov r1, #0x28			; Magnetize fourth coil P4.3 while keeping Red LED HI
+				strb r1, [r4, #0x02]
+				
+				push {lr}
+				bl delay				; Store link register address in stack before delaying program
+				pop {lr}
+				
+				sub r8, #1				; Decrement outer rotation counter
+				cmp r8, #0				; Check if the outer counter is 0
+				bne rotate_cw			; If the outer counter is not 0 (1/4th rotation not complete), continue looping rotation function
+				bx lr					; IF the outer counter is 0 (rotation complete), the program returns to scanning for input
+				
+delay			function				; A simple subroutine to delay the program using an outer and inner counter
+				mov r6, #50
+outer			mov r5, #255
+inner			subs r5, #1
+				bne inner
+				subs r6, #1
+				bne outer
+				bx lr
+				endp
+					
+				end						; END of entire program
